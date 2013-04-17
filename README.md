@@ -1,4 +1,4 @@
-simplePhpTmp
+simplePhpTmp 简单的php模板，比smarty快十倍，方便，简洁，实现变量替换，条件、循环语句，支持嵌套和基本运算
 ============
 
 a simple php template,quicker then  smarty,can use IF FOREACH
