@@ -3,15 +3,16 @@
 /*
 功能说明：
 1.支持{_key}变量的替换，替换为数组的value
-2.支持{_IF key}.....{ENDIF}条件语句 = < > #(不等于) {_IF key=value} {_IF key=_value}
+2.支持{_IF key}.. {ELSE}...{ENDIF}条件语句 = < > #(不等于) {_IF key=value} {_IF key=_value} 
 3.支持{_FOREACH key}...{ENDFOR}循环语句
 4.支持{_key.k1.k2}的多层数组变量替换
 5.支持{_0}数字下标的普通变量的替换
 6.支持条件和循环语句的多层嵌套
 7.支持单字符操作符表达式 .|=><#+- * /  .表示下一级 |表示变量链接 #表示不等于 =是逻辑相等 操作符后面的变量要用_开始，常量不用
+8.支持文件包含 {_INCLUDE mymenu.html}
 
 发明目的
-  实现基于数组（数据）的编程
+	实现基于数组（数据）的编程
 	程序分为界面	业务逻辑	后台数据 三层
 	一般总是实现如下交互
 		1.界面返回数据给业务逻辑 HTTP协议已经实现 POST，GET，COOKIE数组返回给业务
@@ -23,22 +24,28 @@
 
 */
 
-function msg($msg)
+function show($filename,$PArray=array())//如果不能正确替换一般是下标出错或者模板文件不存在
 {
-print ( "<script language=JavaScript>\nalert('".$msg."')\n </script> ");
-//exit;
-}
-
-function show($filename,$PArray)//如果不能正确替换一般是下标出错或者模板文件不存在
-{
-	$file=file_get_contents($filename);
+	//echo $filename;
+	if($pos=strrpos($filename,"/"))
+		$path=substr($filename,0,$pos);
+	else
+		$path="";
+	//echo $pos;
+    
+	
+	if($file=file_get_contents($filename))
+	{
 	//echo 
-	@REPE($file,$PArray);	
+	@REPE($file,$PArray,$path);	
+	}
+	else
+		echo "views not found :".$filename;
 }
 
 
 
-function REPE($file,$PArray) 
+function REPE($file,$PArray,$fpath="") 
 {
 	$head="";
 	$end=$file;
@@ -72,6 +79,16 @@ function REPE($file,$PArray)
 			//$end=strstr($end,"{ENDFOR}");
 			$end=substr($end,$pos+8);			
 		}
+		elseif(substr($end,0,9)=="{_INCLUDE")//处理循环语句
+		{	$pos=findEndPos($end,"{_INCLUDE","}");
+			//if(!$pos)  echo "FORFOR";
+
+			//echo $pos;
+			$tmp=substr($end,0,$pos);
+			INC($tmp,$PArray,$fpath);
+			//$end=strstr($end,"{ENDFOR}");
+			$end=substr($end,$pos+1);			
+		}
 		else//处理普通替换
 		{
 			$pos=strpos($end,"}");
@@ -80,8 +97,8 @@ function REPE($file,$PArray)
 			
 			$key=substr($end,2,$pos-2);
 				//echo $key;
-				
-			if($tmp=getArrValue($key,$PArray))//$PArray[$key]
+				$tmp=getArrValue($key,$PArray);
+			if(!($tmp===false))//$PArray[$key]
 			{
 				echo $tmp;
 					
@@ -103,7 +120,7 @@ function REPE($file,$PArray)
 	echo $end;
 }
 
-function findEndPos($str,$start,$end)//找到开始位置对应的结束位置
+function findEndPos($str,$start,$end,$end2=false)//找到开始位置对应的结束位置
 {
 	$pos=1;
 	$times=0;
@@ -118,15 +135,36 @@ function findEndPos($str,$start,$end)//找到开始位置对应的结束位置
 			$times-=1;
 			$spos=$pos+1;
 		}
+		
+		if($end2 )
+		{
+			
+			if($pos=strpos($str,$end2,$epos))
+			{
+				//$times+=1;
+				//$epos=$pos+1;
+				
+				//echo $times," xx ",$pos;
+				if($times>=0||$spos>=$pos)//有else 并且前面没有其他if或者if在后面
+				break;			
+			}
+			else//全文无else
+				break;
+
+		}
+		
 		if($pos=strpos($str,$end,$epos))
 		{
 			$times+=1;
 			$epos=$pos+1;
 		}
+		
 		//echo $pos;
 			
 	}
 	
+	//if($pos) 
+		//echo $pos,":",$start,$spos,$end,$epos,"<BR>";
 	//echo "e ";
 	return $pos; 
 }
@@ -134,10 +172,10 @@ function findEndPos($str,$start,$end)//找到开始位置对应的结束位置
 function getArrValue($key,$PArray)
 {
 //判断是否包含=><#
-	 similar_text($key,".|=><#+-*/",$per); 
+	 similar_text($key,".|=><#+-*/%",$per); 
 	 if($per==0)
 	 {	//echo " 2s ".$key.'=>'.$PArray[$key];
-		if($PArray[$key])
+		if(isset($PArray[$key]))
 			return $PArray[$key];
 		else
 			return false;
@@ -170,6 +208,8 @@ function getArrValue($key,$PArray)
 		$op="*";
 	elseif($oppos=strpos($key,"/"))
 		$op="/";	
+	elseif($oppos=strpos($key,"%"))
+		$op="%";	
 	
 	if($oppos)
 	{		
@@ -182,7 +222,7 @@ function getArrValue($key,$PArray)
 			$value1=$key1;
 		
 		eval("\$str='".$value."'".$op."'".$value1."';");
-		//echo $str;
+		//echo $key."\$str='".$value."'".$op."'".$value1."';". $str;
 		return $str;
 	}	
 	else
@@ -196,15 +236,21 @@ function FORE($str,$PArray)//模板循环
 	//$str=$file;//strstr($file,"{_FOREACH");
 	
 	$pos=strpos($str,"}");
-	$key=substr($str,10,$pos-10);
+	$key=trim(substr($str,10,$pos-10));
+	
+	$key=explode(" ",$key);
 		
 	$retstr="";
-	if($tmp=getArrValue($key,$PArray))
+	if(isset($key[1]))
+		$tmp1=getArrValue($key[1],$PArray);
+	if($tmp=getArrValue($key[0],$PArray))
 	{
 		$str=substr($str,$pos+1);
 		foreach($tmp as $d)
 		{
-			
+			if(isset($key[1]))
+				$d+=array($key[1]=>$tmp1);
+				
 			$retstr.=REPE($str,$d)."\n";		
 		}
 	}
@@ -220,13 +266,53 @@ function IFE($str,$PArray)//条件模板
 	$pos=strpos($str,"}");
 	$key=substr($str,5,$pos-5);
 		
+		$pos1=findEndPos($str,"{_IF","{ENDIF}","{ELSE}");
+	
+	//echo $pos ," xx ",$pos1," x " ,strlen($str)," <br>";
+	
 	if(getArrValue($key,$PArray))
+	{	
+		//echo strlen("{ELSE}");;
+		//echo substr($str,$pos1,6);
+		//echo substr($str,0,7);
+		//echo $pos;
+		if($pos1)
+			$str=substr($str,$pos+1,$pos1-1-$pos);
+		else
+			$str=substr($str,$pos+1);
+			
+		return REPE($str,$PArray);
+	}
+	else
+	{
+		if($pos1)
+		{
+			$str=substr($str,$pos1+7);
+			return REPE($str,$PArray);
+		}
+		else
+			return "";
+	}
+}
+
+function INC($str,$PArray,$fpath="")
+{
+	//{_INCLUDE file1
+
+	//echo $str;
+	$pos=strpos($str,"}");
+	$key=trim(substr($str,9));//$pos-9
+	//echo $key;
+	if($fpath<>"")
+		$key=$fpath."/".$key;
+	show($key,$PArray);
+	/*if(getArrValue($key,$PArray))
 	{	
 		$str=substr($str,$pos+1);
 		return REPE($str,$PArray);
 	}
 	else
-		return "";
+		return "";*/
 }
 
 //获取标记 动态生成 加载 类 设置名称 id 值
